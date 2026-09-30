@@ -1,106 +1,209 @@
-# SmartPark AI Dashboard
+<div align="center">
 
-Hey! Welcome to the SmartPark AI Dashboard project. This isn't just a static HTML mockup—it's a fully functional, multi-tier **Edge AI and IoT Smart Parking System**. 
+# SmartPark AI
 
-The goal of this project was to simulate a real-world data pipeline where heavy ML inference happens at the edge (using YOLOv8), lightweight battery-powered sensors push state changes, and a Node.js cloud gateway aggregates everything to push live updates to a dashboard via WebSockets.
+### Real-time Edge AI and IoT smart parking simulation
 
-## 🌟 What's Inside? (Features)
+Monitor 48 parking spaces, stream simulated ALPR events, visualize occupancy, and explore demand-based pricing from a responsive operations dashboard.
 
-* **Live Edge AI ALPR Simulation:** Built-in ALPR (Automatic License Plate Recognition) engine that generates real-time vehicle entry/exit events with randomized license plates and vehicle types.
-* **IoT Ground Sensor Array:** Embedded virtual LoRaWAN ground sensors that continuously publish parking spot occupancy changes across all 48 spots.
-* **Dynamic Surge Pricing Engine:** The backend calculates live pricing based on the current capacity of the parking lot automatically. Just like Uber surge pricing, but for parking.
-* **Real-time WebSockets:** A Node.js backend acts as our Cloud Gateway, instantly pushing all telemetry events to the frontend UI via Socket.IO without needing page refreshes.
-* **Manual Override & Offline Mapping:** A built-in IoT simulation panel in the UI to instantly toggle cameras offline, force surge pricing, or manually trigger vehicle entry/exit events.
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-4.x-000000?logo=express&logoColor=white)](https://expressjs.com/)
+[![Socket.IO](https://img.shields.io/badge/Socket.IO-4.x-010101?logo=socket.io&logoColor=white)](https://socket.io/)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![CI](https://github.com/Aman10n/SmartParking/actions/workflows/ci.yml/badge.svg)](https://github.com/Aman10n/SmartParking/actions/workflows/ci.yml)
 
-## ⚙️ How the Workflow Operates
+</div>
 
-1. **The Edge AI ALPR Engine (built into `server.js`)**: Simulates camera nodes detecting vehicles. It generates fake license plate reads and pushes ALPR events every 4–8 seconds with randomized vehicle types (Sedan, SUV, Hatchback, etc.).
-2. **The IoT Ground Sensors (built into `server.js`)**: Simulates magnetometer-based ground sensors checking for cars above them. Fires random `free`/`occupied` state changes every 2–5 seconds across all 4 zones.
-3. **The Gateway Server (`server/server.js`)**: A Node.js Express server that manages the global state of the 48-spot parking facility, runs the dynamic pricing algorithm, and broadcasts all updates to connected dashboard clients using `socket.io`.
-4. **The Dashboard (`index.html`)**: The frontend! It connects via WebSocket and paints a modern glassmorphism UI reacting in real-time to the data stream.
+![SmartPark dashboard preview](docs/smartpark-dashboard.png)
 
----
+## Overview
 
-## 🚀 How to Run It On Your Laptop
+SmartPark AI is a simulation-first smart parking platform that demonstrates how edge vision, ground sensors, a cloud gateway, and a live operator dashboard can work together. The default experience runs entirely on one machine: a Node.js gateway generates realistic telemetry and broadcasts every change to connected dashboards over Socket.IO.
 
-Just **one terminal, two commands**. Everything starts together — the server, the IoT sensors, and the ALPR engine all boot up automatically.
+The repository also includes optional Python clients for experimenting with an external YOLOv8 vehicle-detection pipeline and virtual IoT sensors. No physical hardware or trained license-plate OCR model is required for the demo.
 
-**Prerequisites:**
-- Have [Node.js](https://nodejs.org/) (v18+) installed.
+## Highlights
 
-### Quick Start
+- **Live occupancy map** — 48 spaces across VIP, standard, and EV charging zones.
+- **Real-time telemetry** — incremental updates delivered over Socket.IO without page reloads.
+- **ALPR event simulation** — randomized entry and exit events with plate and vehicle metadata.
+- **Demand-based pricing** — a live quadratic surge model driven by current utilization.
+- **Operations controls** — trigger events, force peak pricing, and simulate device outages.
+- **Responsive interface** — a polished dark dashboard for desktop, tablet, and mobile.
+- **External ingestion APIs** — REST endpoints for independent camera and sensor processes.
+- **Deployment-ready server** — Express serves both the dashboard and the telemetry gateway.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Camera["Edge camera\nYOLOv8 client"] -->|POST /api/alpr| Gateway
+    Sensors["Ground sensors\nPython client"] -->|POST /api/spots| Gateway
+    Simulator["Built-in simulators"] --> Gateway["Express gateway\nState + pricing engine"]
+    Gateway <-->|Socket.IO| Dashboard["Operations dashboard"]
+    Gateway -->|Static assets| Dashboard
+```
+
+The server keeps the facility state in memory, recalculates pricing when occupancy changes, and broadcasts compact updates to all connected clients. Built-in simulators make the full flow observable immediately after startup.
+
+## Quick start
+
+### Requirements
+
+- [Node.js](https://nodejs.org/) 18 or newer
+- npm 9 or newer
+
+### Run locally
 
 ```bash
-npm install
+git clone https://github.com/Aman10n/SmartParking.git
+cd SmartParking
+npm ci
 npm start
 ```
 
-*➡️ Open your browser and go to `http://localhost:3000`. The dashboard will be live with data flowing within 2 seconds!*
+Open [http://localhost:3000](http://localhost:3000). Telemetry begins automatically after two seconds.
 
-You'll see:
-- 🅿️ **Parking Map** lighting up as sensors report spots occupied/free
-- 📷 **ALPR Feed** streaming license plate detection events in real-time
-- 💰 **Dynamic Pricing** adjusting based on lot utilization
-- 📊 **Analytics Charts** displaying occupancy and revenue trends
+### Quality checks
 
-### IoT Simulation Panel
-
-Navigate to the **IoT Simulation** tab in the sidebar to manually:
-- Trigger a **Vehicle ENTRY** event (or press `E`)
-- Trigger a **Vehicle EXIT** event (or press `X`)
-- **Force Peak Surge Pricing** to test the pricing engine
-- **Toggle Camera Disconnect** to simulate hardware failure
-
----
-
-## 🌐 Live Deployment
-
-This project is deployed on **Render** and runs with a single `npm start` command.
-
-**Deploy your own:**
-1. Fork this repo
-2. Go to [render.com](https://render.com) → New Web Service → Connect your fork
-3. Set Build Command: `npm install` | Start Command: `npm start` | Instance: Free
-4. Done! Live in ~2 minutes.
-
----
-
-## 📁 Project Structure
-
-```
-SmartPark/
-├── index.html              # Dashboard frontend (glassmorphism UI)
-├── css/style.css           # Styling (dark theme, animations)
-├── js/app.js               # Frontend logic (WebSocket client, Chart.js)
-├── server/
-│   └── server.js           # Gateway server + built-in simulators
-├── edge-ai/                # Standalone YOLOv8 ALPR script (optional)
-│   ├── main.py             #   Can run separately against real camera feeds
-│   └── requirements.txt
-├── iot-sensors/            # Standalone IoT sensor script (optional)
-│   ├── virtual_sensors.py  #   Can run separately for external testing
-│   └── requirements.txt
-├── package.json            # Node.js dependencies & start script
-└── .gitignore
+```bash
+npm run check
+npm test
 ```
 
-> **Note:** The `edge-ai/` and `iot-sensors/` Python scripts are optional standalone versions. They can be pointed at any running SmartPark server (local or deployed) to push external telemetry data via REST APIs (`POST /api/alpr` and `POST /api/spots`).
+The smoke test starts the application on an isolated port and verifies the dashboard, health endpoint, valid telemetry ingestion, and invalid-payload rejection.
+
+## Using the dashboard
+
+The **IoT Simulation** view provides controls for common operational scenarios:
+
+| Control | Behavior |
+| --- | --- |
+| Vehicle entry | Generates an occupied-space ALPR event |
+| Vehicle exit | Generates a free-space ALPR event and a simulated fee |
+| Force surge | Pins the pricing multiplier to its configured maximum |
+| Camera disconnect | Pauses simulated camera and sensor telemetry |
+
+Keyboard shortcuts: press `E` for an entry event or `X` for an exit event.
+
+## Telemetry API
+
+### Health check
+
+```http
+GET /api/health
+```
+
+### Submit an ALPR event
+
+```http
+POST /api/alpr
+Content-Type: application/json
+
+{
+  "spot": "A01",
+  "direction": "ENTRY",
+  "plate": "KA 01 AB 1234",
+  "vehicleType": "Sedan",
+  "timestamp": 1767225600000
+}
+```
+
+### Submit a ground-sensor update
+
+```http
+POST /api/spots
+Content-Type: application/json
+
+{
+  "spot": "A01",
+  "status": "occupied",
+  "battery": 97.4,
+  "timestamp": 1767225600000
+}
+```
+
+Requests with an unknown space or invalid state are rejected with HTTP `400`.
+
+## Optional Python telemetry clients
+
+The normal demo does not require Python. To run the standalone clients against a local gateway:
+
+```bash
+# Terminal 1 — application gateway
+npm start
+
+# Terminal 2 — virtual ground sensors (standard library only)
+python iot-sensors/virtual_sensors.py
+
+# Terminal 3 — optional YOLOv8 vehicle-detection client
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r edge-ai/requirements.txt
+python edge-ai/main.py
+```
+
+The YOLOv8 client performs real vehicle detection on a sample frame. License-plate text remains simulated because this project does not ship a trained OCR/ALPR model.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP and Socket.IO port |
+| `ALLOWED_ORIGIN` | Same origin | Optional browser origin allowed for cross-origin Socket.IO connections |
+| `DISABLE_SIMULATORS` | `false` | Set to `true` when supplying only external telemetry |
+
+Facility capacity, base rate, and maximum surge are defined in `server/server.js`.
+
+## Project structure
+
+```text
+SmartParking/
+├── .github/workflows/ci.yml     # Automated syntax and smoke checks
+├── css/style.css                # Responsive dashboard styling
+├── docs/                        # Repository media
+├── edge-ai/
+│   ├── main.py                  # Optional YOLOv8 telemetry client
+│   └── requirements.txt
+├── iot-sensors/
+│   ├── virtual_sensors.py       # Optional virtual ground sensors
+│   └── requirements.txt
+├── js/app.js                    # Dashboard state and Socket.IO client
+├── scripts/smoke-test.js        # End-to-end application smoke test
+├── server/server.js             # Express, Socket.IO, pricing, simulators
+├── index.html                   # Dashboard markup
+└── package.json                 # Application scripts and dependencies
+```
+
+## Deployment
+
+The application can run on any Node.js host that supports WebSockets.
+
+For Render, Railway, or a similar platform:
+
+- **Build command:** `npm ci`
+- **Start command:** `npm start`
+- **Health-check path:** `/api/health`
+- **Runtime:** Node.js 18+
+
+Because facility state is stored in memory, restarting or scaling the process resets the demo state. A production deployment should use persistent storage and a shared event broker.
+
+## Production roadmap
+
+- Persist parking sessions and revenue in PostgreSQL.
+- Add authenticated operator and device identities.
+- Replace generated plates with a trained OCR/ALPR pipeline.
+- Store historical telemetry for genuine forecasting and analytics.
+- Add payment-provider integration and audited billing workflows.
+- Introduce device health monitoring, rate limiting, and structured logging.
+
+## Scope
+
+SmartPark AI is an engineering demonstration and portfolio project. Sensor readings, license plates, revenue, charts, and predictive labels shown in the interface are simulated unless an external telemetry source is connected.
 
 ---
 
-## 🔧 Real-World Hardware (For Production)
-
-To move from simulation to a real parking facility, you would need:
-
-| Component | Hardware | Per Unit |
-|-----------|----------|----------|
-| Ground Sensors | ESP32 + Magnetometer (BMM150) | ~$20 |
-| ALPR Camera | Raspberry Pi 5 + USB Camera + YOLOv8 | ~$100 |
-| Local Gateway | Raspberry Pi 4 running `server.js` | ~$60 |
-| Wireless | LoRa Gateway or WiFi Router | ~$80 |
-
-**Estimated total for 48 spots: ~$1,500**
-
----
-
-Feel free to fork, break, and rebuild it!
+<div align="center">
+Built by <a href="https://github.com/Aman10n">Aman10n</a>
+</div>

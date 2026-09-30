@@ -1,18 +1,14 @@
 {
   "name": "smartpark-gateway",
   "version": "1.0.0",
-  "description": "Node.js WebSocket gateway connecting Mosquitto to Dashboard",
+  "description": "SmartPark Express and Socket.IO telemetry gateway",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "aedes": "^1.0.1",
-    "aedes-server-factory": "^0.2.1",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "mqtt": "^5.0.0",
-    "socket.io": "^4.7.2",
-    "socket.io-client": "^4.8.3"
+    "socket.io": "^4.7.2"
   }
 }

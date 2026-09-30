@@ -115,6 +115,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return Math.min(Math.max(val, min), max);
     }
 
+    function escapeHTML(value) {
+        const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(value ?? '').replace(/[&<>"']/g, character => entities[character]);
+    }
+
     // ─── Rendering: Parking Map ────────────────────────
     function initSpotsUI() {
         const grid = $('#parking-map');
@@ -226,6 +231,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const feed = $('#alpr-feed');
         const entry = document.createElement('div');
         entry.className = 'alpr-entry';
+        const safePlate = escapeHTML(event.plate);
+        const safeVehicleType = escapeHTML(event.vehicleType);
+        const safeSpot = escapeHTML(event.spot);
+        const safeDirection = escapeHTML(event.direction);
+        const safeTime = escapeHTML(event.time);
+        const safeDuration = escapeHTML(event.duration);
         
         // Slide down animation
         entry.style.opacity = '0';
@@ -235,24 +246,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const directionColor = event.direction === 'ENTRY' ? 'var(--emerald)' : 'var(--amber)';
         const directionIcon = event.direction === 'ENTRY' ? '↘' : '↗';
         const feeHTML = event.fee ? `<div style="font-size: 0.75rem; color: var(--emerald); font-weight: bold;">+$${event.fee.toFixed(2)}</div>` : '';
-        const durHTML = event.duration ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${event.duration}</div>` : '';
+        const durHTML = event.duration ? `<div style="font-size: 0.7rem; color: var(--text-muted);">${safeDuration}</div>` : '';
 
         entry.innerHTML = `
             <div class="alpr-camera">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             </div>
             <div class="alpr-details">
-                <div class="alpr-plate">${event.plate}</div>
-                <div class="alpr-meta">${event.vehicleType} • Spot ${event.spot}</div>
+                <div class="alpr-plate">${safePlate}</div>
+                <div class="alpr-meta">${safeVehicleType} • Spot ${safeSpot}</div>
             </div>
             <div class="alpr-direction">
                 <div style="color: ${directionColor}; font-weight: bold; display: flex; align-items: center; gap: 4px;">
-                    ${directionIcon} ${event.direction}
+                    ${directionIcon} ${safeDirection}
                 </div>
                 ${durHTML}
                 ${feeHTML}
             </div>
-            <div class="alpr-time">${event.time}</div>
+            <div class="alpr-time">${safeTime}</div>
         `;
 
         feed.insertBefore(entry, feed.firstChild);

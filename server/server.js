@@ -6,9 +6,14 @@ const path = require('path');
 // ─── HTTP & WebSocket Server ───────────────────────────
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+const socketOptions = process.env.ALLOWED_ORIGIN
+    ? { cors: { origin: process.env.ALLOWED_ORIGIN } }
+    : {};
+const io = new Server(server, socketOptions);
 
-app.use(express.json()); // Middleware for JSON payloads
+app.use(express.json({ limit: '16kb' }));
+
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 
 // ─── REST Telemetry Webhooks (Replaces MQTT) ───────────
 app.post('/api/alpr', (req, res) => {
@@ -16,16 +21,38 @@ app.post('/api/alpr', (req, res) => {
         if (facilityState.cameraOffline) {
             return res.status(503).json({ error: "System Offline: Camera Disconnected" });
         }
-        const data = req.body;
-        console.log(`[REST] Incoming ALPR Event:`, data);
-        
-        const spotId = data.spot;
-        if (facilityState.spots[spotId]) {
-            facilityState.spots[spotId].status = data.direction === 'ENTRY' ? 'occupied' : 'free';
-            facilityState.spots[spotId].vehicle = data.direction === 'ENTRY' ? data.plate : null;
-            facilityState.spots[spotId].entryTime = data.direction === 'ENTRY' ? Date.now() : null;
+        const data = req.body || {};
+        const spotId = typeof data.spot === 'string' ? data.spot.trim().toUpperCase() : '';
+        const direction = typeof data.direction === 'string' ? data.direction.trim().toUpperCase() : '';
+        const plate = typeof data.plate === 'string' ? data.plate.trim().toUpperCase() : '';
+        const vehicleType = typeof data.vehicleType === 'string' ? data.vehicleType.trim() : '';
+
+        if (!hasOwn(facilityState.spots, spotId)) {
+            return res.status(400).json({ error: 'Unknown parking spot' });
         }
-        io.emit('alpr_event', data);
+        if (!['ENTRY', 'EXIT'].includes(direction)) {
+            return res.status(400).json({ error: 'Direction must be ENTRY or EXIT' });
+        }
+        if (!plate || plate.length > 20 || !/^[A-Z0-9 -]+$/.test(plate)) {
+            return res.status(400).json({ error: 'Plate must contain 1-20 letters, numbers, spaces, or hyphens' });
+        }
+        if (!vehicleType || vehicleType.length > 32) {
+            return res.status(400).json({ error: 'Vehicle type must contain 1-32 characters' });
+        }
+
+        const event = {
+            spot: spotId,
+            direction,
+            plate,
+            vehicleType,
+            timestamp: Number.isFinite(data.timestamp) ? data.timestamp : Date.now()
+        };
+        console.log('[REST] Incoming ALPR event:', event);
+
+        facilityState.spots[spotId].status = direction === 'ENTRY' ? 'occupied' : 'free';
+        facilityState.spots[spotId].vehicle = direction === 'ENTRY' ? plate : null;
+        facilityState.spots[spotId].entryTime = direction === 'ENTRY' ? Date.now() : null;
+        io.emit('alpr_event', event);
         io.emit('spot_update', { spotId, state: facilityState.spots[spotId] });
         io.emit('pricing_update', getPricingState());
         
@@ -41,13 +68,19 @@ app.post('/api/spots', (req, res) => {
         if (facilityState.cameraOffline) {
             return res.status(503).json({ error: "System Offline: Sensors Disconnected" });
         }
-        const data = req.body;
-        console.log(`[REST] Incoming Spot Event:`, data);
-        
-        const spotId = data.spot;
-        if (facilityState.spots[spotId]) {
-            facilityState.spots[spotId].status = data.status;
+        const data = req.body || {};
+        const spotId = typeof data.spot === 'string' ? data.spot.trim().toUpperCase() : '';
+        const status = typeof data.status === 'string' ? data.status.trim().toLowerCase() : '';
+
+        if (!hasOwn(facilityState.spots, spotId)) {
+            return res.status(400).json({ error: 'Unknown parking spot' });
         }
+        if (!['free', 'occupied'].includes(status)) {
+            return res.status(400).json({ error: 'Status must be free or occupied' });
+        }
+
+        console.log('[REST] Incoming spot event:', { spot: spotId, status });
+        facilityState.spots[spotId].status = status;
         io.emit('spot_update', { spotId, state: facilityState.spots[spotId] });
         io.emit('pricing_update', getPricingState());
         
@@ -56,6 +89,15 @@ app.post('/api/spots', (req, res) => {
         console.error('[REST] Parse error:', err);
         res.status(400).json({ error: err.message });
     }
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        service: 'smartparking-gateway',
+        uptimeSeconds: Math.round(process.uptime()),
+        pricing: getPricingState()
+    });
 });
 
 // Serve frontend dashboard statically
@@ -99,8 +141,6 @@ function getPricingState() {
     };
 }
 
-// End of startInternalMqttClient function which was moved above
-
 // ─── WebSocket Connections (Dashboard) ─────────────────
 io.on('connection', (socket) => {
     console.log('[Socket] Dashboard client connected:', socket.id);
@@ -113,13 +153,13 @@ io.on('connection', (socket) => {
     });
 
     // Listen for manual overrides from the IoT Simulation Panel in the browser
-    socket.on('manual_override', (action) => {
+    socket.on('manual_override', (action = {}) => {
         console.log('[Simulation] Manual override:', action);
         
-        if (action.type === 'force_surge') {
+        if (action.type === 'force_surge' && typeof action.value === 'boolean') {
             facilityState.forceSurge = action.value;
             io.emit('pricing_update', getPricingState());
-        } else if (action.type === 'toggle_camera') {
+        } else if (action.type === 'toggle_camera' && typeof action.value === 'boolean') {
             facilityState.cameraOffline = action.value;
             io.emit('arch_status', { cameraOffline: facilityState.cameraOffline });
         }
@@ -221,10 +261,12 @@ server.listen(PORT, () => {
     console.log(`↳ Serving WebSocket dashboard to clients...`);
 
     // Auto-start simulators after 2 seconds (let clients connect first)
-    setTimeout(() => {
-        console.log(`\n⚡ Starting built-in simulators...`);
-        startIoTSimulator();
-        startALPRSimulator();
-        console.log(`✅ All systems live! Dashboard is fully operational.\n`);
-    }, 2000);
+    if (process.env.DISABLE_SIMULATORS !== 'true') {
+        setTimeout(() => {
+            console.log(`\n⚡ Starting built-in simulators...`);
+            startIoTSimulator();
+            startALPRSimulator();
+            console.log(`✅ All systems live! Dashboard is fully operational.\n`);
+        }, 2000);
+    }
 });
